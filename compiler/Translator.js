@@ -105,7 +105,7 @@ export default class FortranTranslator {
      * @param {CST.Clase} node
      * @this {Visitor}
      */
-    visitClase(node) {
+    visitClase2(node) {
         // [abc0-9A-Z]
         let characterClass = [];
         const set = node.chars
@@ -120,14 +120,37 @@ export default class FortranTranslator {
         if (ranges.length !== 0) {
             characterClass = [...characterClass, ...ranges];
         }
-        return characterClass.join(' .or. '); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
+        return characterClass.join(' .or. &\n'); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
     }
+
+    visitClase(node) {
+        // [abc0-9A-Z]
+        let characterClass = [];
+        const set = node.chars
+            .filter((char) => typeof char === 'string')
+            .map((char) => `'${char}'`);
+        const ranges = node.chars
+            .filter((char) => char instanceof CST.Rango)
+            .map((range) => {
+                let rangeStr = range.accept(this);
+                // Agregar el tercer parámetro y el paréntesis de cierre
+                return `${rangeStr}, ${node.isCase === 'i' ? '.true.' : '.false.'})`;
+            });
+        if (set.length !== 0) {
+            characterClass = [`acceptSet([${set.join(',')}])`];
+        }
+        if (ranges.length !== 0) {
+            characterClass = [...characterClass, ...ranges];
+        }
+        return characterClass.join(' .or. &\n               '); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
+    }
+    
     /**
      * @param {CST.Rango} node
      * @this {Visitor}
      */
     visitRango(node) {
-        return `acceptRange('${node.bottom}', '${node.top}')`;
+        return `acceptRange('${node.bottom}', '${node.top}'`;
     }
     /**
      * @param {CST.Identificador} node

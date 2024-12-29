@@ -63,17 +63,30 @@ module parser
         accept = .true.
     end function acceptString
 
-    function acceptRange(bottom, top) result(accept)
+    function acceptRange(bottom, top, isCase) result(accept)
         character(len=1) :: bottom, top
-        logical :: accept
+        logical :: accept, isCase
 
-        if(.not. (input(cursor:cursor) >= bottom .and. input(cursor:cursor) <= top)) then
-            accept = .false.
-            return
+        if (isCase) then
+            if (.not. (to_lower(input(cursor:cursor)) >= to_lower(bottom) .and. &
+                to_lower(input(cursor:cursor)) <= to_lower(top))) then
+                 expected = "["// bottom // "-" // top //"]"
+                accept = .false.
+                return
+            end if
+        else
+            if (.not. (input(cursor:cursor) >= bottom .and. &
+                input(cursor:cursor) <= top)) then
+                expected = "["// bottom // "-" // top //"]"
+                accept = .false.
+                return
+            end if
         end if
+
         cursor = cursor + 1
         accept = .true.
     end function acceptRange
+
 
     function acceptSet(set) result(accept)
         character(len=1), dimension(:) :: set
