@@ -97,7 +97,9 @@ export default class FortranTranslator {
      * @this {Visitor}
      */
     visitString(node) {
-        return `acceptString('${node.val}')`;
+        console.log(node.isCase)
+        const templateString = `acceptString('${node.val}', ${node.isCase === 'i' ? '.true.' : '.false.'})`;
+        return templateString
     }
     /**
      * @param {CST.Clase} node

@@ -41,16 +41,23 @@ module parser
 
     ${cst.map((rules) => rules.accept(translator)).join('\n')}
 
-    function acceptString(str) result(accept)
+    function acceptString(str,isCase) result(accept)
         character(len=*) :: str
-        logical :: accept
+        logical :: accept,isCase
         integer :: offset
-
         offset = len(str) - 1
-        if (str /= input(cursor:cursor + offset)) then
-            accept = .false.
-            expected = str
-            return
+        if(isCase) then
+            if (to_lower(str) /= to_lower(input(cursor:cursor + offset))) then
+                accept = .false.
+                expected = str
+                return
+            end if
+        else
+            if (str /= input(cursor:cursor + offset)) then
+                accept = .false.
+                expected = str
+                return
+            end if
         end if
         cursor = cursor + len(str);
         accept = .true.
@@ -102,6 +109,22 @@ module parser
         end if
         accept = .true.
     end function acceptEOF
+
+    ! Funciones Auxiliares para verificacion
+    
+    function to_lower(str) result(lower_str)
+        character(len=*), intent(in) :: str
+        character(len=len(str)) :: lower_str
+        integer :: i
+
+        do i = 1, len(str)
+             if (iachar(str(i:i)) >= iachar('A') .and. iachar(str(i:i)) <= iachar('Z')) then
+                lower_str(i:i) = achar(iachar(str(i:i)) + 32)
+            else
+                lower_str(i:i) = str(i:i)
+            end if
+        end do
+    end function to_lower
 end module parser
     `;
 }
