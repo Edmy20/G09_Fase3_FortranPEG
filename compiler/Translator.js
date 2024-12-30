@@ -1,6 +1,7 @@
 import Visitor from '../visitor/Visitor.js';
 import * as CST from '../visitor/CST.js';
-
+let numGrupo2 = 0
+let numGrupo
 /**
  * @typedef {import('../visitor/Visitor.js').default<string>} Visitor
  */
@@ -13,11 +14,22 @@ export default class FortranTranslator {
      * @this {Visitor}
      */
     visitProducciones(node) {
+        
+        numGrupo = node.expr.exprs
+  .flatMap(expr => expr.exprs)  
+  .filter(expr => expr.expr instanceof CST.Grupo)  
+  .length;  
+
+console.log("Número de instancias de CST.Grupo:", numGrupo);
+
+        let listVars = this.getVarDo(numGrupo)
+        numGrupo2 = 0
+
         const templateProd = 
      `
     function peg_${node.id}() result(accept)
         logical :: accept
-        integer :: i
+        integer :: ${listVars}
 
         accept = .false.
         ${node.expr.accept(this)}
@@ -40,6 +52,8 @@ export default class FortranTranslator {
      * @this {Visitor}
      */
     visitOpciones(node) {
+
+        const template2 =  node.exprs.map((expr) => expr.accept(this)).join('\n');
         const template = `
         do i = 0, ${node.exprs.length}
             select case(i)
@@ -66,59 +80,61 @@ export default class FortranTranslator {
     visitUnion(node) {
         return node.exprs.map((expr) => expr.accept(this)).join('\n');
     }
+
     /**
      * @param {CST.Expresion} node
      * @this {Visitor}
      */
     visitExpresion(node) {
-        const condition = node.expr.accept(this);
 
-        const templateOneOrMore =  `
-                if (.not. (${condition})) then
-                    cycle
-                end if
-                do while (.not. cursor > len(input))
-                    if (.not. (${condition})) then
-                        exit
-                    end if
-                end do
-        `
-        const templateZeroOrMore =  `
-                do while (.not. cursor > len(input))
-                    if (.not. (${condition})) then
-                        exit
-                    end if
-                end do
-        `
-        const templateZeroOrOne =  `
-                if (.not. (${condition})) then
-                    
-                end if
-        `
-        const templateOne =  `
-                if (.not. (${condition})) then
-                    cycle
-                end if
-        `
-        switch (node.qty) {
-            case '+':
-                return templateOneOrMore;
-            case '*':
-                return templateZeroOrMore;
-            case '?':
-                return templateZeroOrOne;
-            default:
-                return templateOne;
+        if ( node.qty && //there is a quantifier
+            (node.expr instanceof CST.Cadena
+            || node.expr instanceof CST.Clase
+            || node.expr instanceof CST.Grupo)
+        ){
+            node.expr.qty = node.qty // inherit quantifier
         }
+
+
+        return node.expr.accept(this);
     }
-    /**
-     * @param {CST.String} node
+        /**
+     * @param {CST.Grupo} node
      * @this {Visitor}
      */
-    visitString(node) {
+    visitGrupo(node){
+        node.expr.qty = node.qty
+
+        numGrupo2 += 1
+        
+        const template = `
+        do i${numGrupo2-numGrupo} = 0, ${node.expr.exprs.length}
+            select case(i${numGrupo2-numGrupo})
+                ${node.expr.exprs
+                    .map(
+                        (expr, i) => `
+                case(${i})
+                            ${expr.accept(this)}
+                    exit
+                        `
+                    )
+                    .join('\n')}
+                case default
+                    return
+            end select
+        end do
+        `;
+
+        return template
+    }
+    /**
+     * @param {CST.Cadena} node
+     * @this {Visitor}
+     */
+    visitCadena(node) {
         console.log(node.isCase)
         const templateString = `acceptString('${node.val}', ${node.isCase === 'i' ? '.true.' : '.false.'})`;
-        return templateString
+        return this.printCondition(node.qty,templateString)
     }
 
     visitClase(node) {
@@ -140,7 +156,8 @@ export default class FortranTranslator {
         if (ranges.length !== 0) {
             characterClass = [...characterClass, ...ranges];
         }
-        return characterClass.join(' .or. &\n               '); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
+        const condition = characterClass.join(' .or. &\n               '); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
+       return this.printCondition(node.qty,condition)
     }
     
     /**
@@ -186,5 +203,55 @@ export default class FortranTranslator {
         } else{
           return char.charCodeAt(0);
         }
+      }
+
+      printCondition(qty,condition){
+        //const condition = node.expr.accept(this);
+
+        const templateOneOrMore =  `
+                if (.not. (${condition})) then
+                    cycle
+                end if
+                do while (.not. cursor > len(input))
+                    if (.not. (${condition})) then
+                        exit
+                    end if
+                end do
+        `
+        const templateZeroOrMore =  `
+                do while (.not. cursor > len(input))
+                    if (.not. (${condition})) then
+                        exit
+                    end if
+                end do
+        `
+        const templateZeroOrOne =  `
+                if (.not. (${condition})) then
+                    
+                end if
+        `
+        const templateOne =  `
+                if (.not. (${condition})) then
+                    cycle
+                end if
+        `
+        switch (qty) {
+            case '+':
+                return templateOneOrMore;
+            case '*':
+                return templateZeroOrMore;
+            case '?':
+                return templateZeroOrOne;
+            default:
+                return templateOne;
+        }
+      }
+
+    getVarDo(numero) {
+        let resultado = 'i';
+        for (let j = 1; j <= numero; j++) {
+          resultado += `,i${j}`;
+        }
+        return resultado;
       }
 }

@@ -46,9 +46,11 @@ export class Opciones {
     /**
      *
      * @param {Union[]} exprs
+	 * @param {string=} qty
      */
-    constructor(exprs) {
+    constructor(exprs, qty) {
         this.exprs = exprs;
+		this.qty = qty;
     }
 
     /**
@@ -115,15 +117,17 @@ export class Expresion {
 /**
  * @implements {Node}
  */
-export class String {
+export class Cadena {
     /**
      *
      * @param {string} val
 	 * @param {boolean=} isCase
+	 * @param {string=} qty
      */
-    constructor(val, isCase) {
+    constructor(val, isCase, qty) {
         this.val = val;
 		this.isCase = isCase;
+		this.qty = qty;
     }
 
     /**
@@ -132,7 +136,32 @@ export class String {
      * @returns {T}
      */
     accept(visitor) {
-        return visitor.visitString(this);
+        return visitor.visitCadena(this);
+    }
+}
+    
+
+/**
+ * @implements {Node}
+ */
+export class Grupo {
+    /**
+     *
+     * @param {Opciones} expr
+	 * @param {string=} qty
+     */
+    constructor(expr, qty) {
+        this.expr = expr;
+		this.qty = qty;
+    }
+
+    /**
+     * @template T
+     * @param {Visitor<T>} visitor
+     * @returns {T}
+     */
+    accept(visitor) {
+        return visitor.visitGrupo(this);
     }
 }
     
@@ -145,10 +174,12 @@ export class Clase {
      *
      * @param {(string|Rango)[]} chars
 	 * @param {boolean=} isCase
+	 * @param {string=} qty
      */
-    constructor(chars, isCase) {
+    constructor(chars, isCase, qty) {
         this.chars = chars;
 		this.isCase = isCase;
+		this.qty = qty;
     }
 
     /**
