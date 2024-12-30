@@ -137,7 +137,7 @@ export default class FortranTranslator {
                 return `${rangeStr}, ${node.isCase === 'i' ? '.true.' : '.false.'})`;
             });
         if (set.length !== 0) {
-            characterClass = [`acceptSet([${set.join(',')}])`];
+            characterClass = [`acceptSet([${set.join(',')}], ${node.isCase === 'i' ? '.true.' : '.false.'})`];
         }
         if (ranges.length !== 0) {
             characterClass = [...characterClass, ...ranges];

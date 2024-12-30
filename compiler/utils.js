@@ -87,18 +87,31 @@ module parser
         accept = .true.
     end function acceptRange
 
-
-    function acceptSet(set) result(accept)
+    function acceptSet(set, isCase) result(accept)
         character(len=1), dimension(:) :: set
-        logical :: accept
+        logical :: accept, isCase
+        character(len=1) :: char_to_check
+        integer :: i
+       
+        if (isCase) then
+            char_to_check = to_lower(input(cursor:cursor))
+            do i = 1, size(set)
+                set(i) = to_lower(set(i))
+            end do
+        else
+            char_to_check = input(cursor:cursor)
+        end if
 
-        if(.not. (findloc(set, input(cursor:cursor), 1) > 0)) then
+        if (.not. (findloc(set, char_to_check, 1) > 0)) then
             accept = .false.
+            expected =  "[" // list_to_string(set) // "]"
             return
         end if
+
         cursor = cursor + 1
         accept = .true.
     end function acceptSet
+
 
     function acceptPeriod() result(accept)
         logical :: accept
@@ -138,6 +151,26 @@ module parser
             end if
         end do
     end function to_lower
+
+    function list_to_string(set) result(result_str)
+        character(len=1), dimension(:), intent(in) :: set
+        character(len=:), allocatable :: result_str
+        integer :: total_length, i
+    
+        total_length = size(set) * 3 - 1  
+    
+        allocate(character(len=total_length) :: result_str)
+    
+        result_str = ' '
+    
+        result_str = set(1)
+        do i = 2, size(set)
+            result_str = trim(result_str) // ', ' // set(i)
+        end do
+    
+    end function list_to_string
+
+
 end module parser
     `;
 }
