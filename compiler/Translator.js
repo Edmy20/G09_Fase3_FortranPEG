@@ -126,7 +126,7 @@ export default class FortranTranslator {
         let characterClass = [];
         const set = node.chars
             .filter((char) => typeof char === 'string')
-            .map((char) => `'${char}'`);
+            .map((char) => `${this.toAsciiString(char)}`);
         const ranges = node.chars
             .filter((char) => char instanceof CST.Rango)
             .map((range) => {
@@ -172,8 +172,8 @@ export default class FortranTranslator {
         return 'acceptEOF()';
     }
 
-    toAsciiString(char, num) {
-        console.log(char);
+    toAsciiString(char) {
+        //console.log(char);
         const charMap = {
           "\\t": 9,
           "\\n": 10,
@@ -182,15 +182,9 @@ export default class FortranTranslator {
         };
     
         if (char in charMap) {
-          return `char(${charMap[char]})`;
-        } else {
-          if (char >= "A" && char <= "Z" && num == 1) {
-            char = String.fromCharCode(char.charCodeAt(0) + 32);
-          } else if (char >= "a" && char <= "z" && num == 0) {
-            char = String.fromCharCode(char.charCodeAt(0) - 32);
-          }
-    
-          return `char(${char.charCodeAt(0)})`;
+          return charMap[char]
+        } else{
+          return char.charCodeAt(0);
         }
       }
 }

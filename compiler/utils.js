@@ -88,28 +88,28 @@ module parser
     end function acceptRange
 
     function acceptSet(set, isCase) result(accept)
-        character(len=1), dimension(:) :: set
+        integer, dimension(:),intent(in) :: set
         logical :: accept, isCase
         character(len=1) :: char_to_check
-        integer :: i
+        integer :: i,ascii_code
+
+        accept = .false.
        
         if (isCase) then
             char_to_check = to_lower(input(cursor:cursor))
-            do i = 1, size(set)
-                set(i) = to_lower(set(i))
-            end do
         else
             char_to_check = input(cursor:cursor)
         end if
 
-        if (.not. (findloc(set, char_to_check, 1) > 0)) then
-            accept = .false.
-            expected =  "[" // list_to_string(set) // "]"
-            return
+        ascii_code = iachar(char_to_check)
+        !print *, ascii_code
+        if (any(findloc(set, ascii_code) > 0)) then 
+            accept = .true. 
+            cursor = cursor + 1 
+        else 
+            expected =  list_to_string(set)
         end if
 
-        cursor = cursor + 1
-        accept = .true.
     end function acceptSet
 
 
@@ -153,20 +153,31 @@ module parser
     end function to_lower
 
     function list_to_string(set) result(result_str)
-        character(len=1), dimension(:), intent(in) :: set
+        integer, dimension(:),intent(in) :: set
         character(len=:), allocatable :: result_str
         integer :: total_length, i
     
         total_length = size(set) * 3 - 1  
     
         allocate(character(len=total_length) :: result_str)
-    
-        result_str = ' '
-    
-        result_str = set(1)
-        do i = 2, size(set)
-            result_str = trim(result_str) // ', ' // set(i)
+        result_str = '['
+        do i = 1, size(set)
+            select case (set(i))
+            case (10) ! Nueva línea
+                result_str = result_str // '\\n'
+            case (9)  ! Tabulación
+                result_str = result_str // '\\t'
+            case (13) ! Retorno de carro
+                result_str = result_str // '\\r'
+            case (32) ! Espacio
+                result_str = result_str // '_'
+            case default
+                result_str = result_str // achar(set(i))
+
+            end select
         end do
+    
+        result_str = result_str // ']'
     
     end function list_to_string
 
