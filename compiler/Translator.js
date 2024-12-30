@@ -72,9 +72,8 @@ export default class FortranTranslator {
      */
     visitExpresion(node) {
         const condition = node.expr.accept(this);
-        switch (node.qty) {
-            case '+':
-                return `
+
+        const templateOneOrMore =  `
                 if (.not. (${condition})) then
                     cycle
                 end if
@@ -83,13 +82,33 @@ export default class FortranTranslator {
                         exit
                     end if
                 end do
-                `;
-            default:
-                return `
+        `
+        const templateZeroOrMore =  `
+                do while (.not. cursor > len(input))
+                    if (.not. (${condition})) then
+                        exit
+                    end if
+                end do
+        `
+        const templateZeroOrOne =  `
+                if (.not. (${condition})) then
+                    
+                end if
+        `
+        const templateOne =  `
                 if (.not. (${condition})) then
                     cycle
                 end if
-                `;
+        `
+        switch (node.qty) {
+            case '+':
+                return templateOneOrMore;
+            case '*':
+                return templateZeroOrMore;
+            case '?':
+                return templateZeroOrOne;
+            default:
+                return templateOne;
         }
     }
     /**
@@ -100,27 +119,6 @@ export default class FortranTranslator {
         console.log(node.isCase)
         const templateString = `acceptString('${node.val}', ${node.isCase === 'i' ? '.true.' : '.false.'})`;
         return templateString
-    }
-    /**
-     * @param {CST.Clase} node
-     * @this {Visitor}
-     */
-    visitClase2(node) {
-        // [abc0-9A-Z]
-        let characterClass = [];
-        const set = node.chars
-            .filter((char) => typeof char === 'string')
-            .map((char) => `'${char}'`);
-        const ranges = node.chars
-            .filter((char) => char instanceof CST.Rango)
-            .map((range) => range.accept(this));
-        if (set.length !== 0) {
-            characterClass = [`acceptSet([${set.join(',')}])`];
-        }
-        if (ranges.length !== 0) {
-            characterClass = [...characterClass, ...ranges];
-        }
-        return characterClass.join(' .or. &\n'); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
     }
 
     visitClase(node) {
@@ -173,4 +171,26 @@ export default class FortranTranslator {
     visitFin(node) {
         return 'acceptEOF()';
     }
+
+    toAsciiString(char, num) {
+        console.log(char);
+        const charMap = {
+          "\\t": 9,
+          "\\n": 10,
+          "\\r": 13,
+          " ": 32,
+        };
+    
+        if (char in charMap) {
+          return `char(${charMap[char]})`;
+        } else {
+          if (char >= "A" && char <= "Z" && num == 1) {
+            char = String.fromCharCode(char.charCodeAt(0) + 32);
+          } else if (char >= "a" && char <= "z" && num == 0) {
+            char = String.fromCharCode(char.charCodeAt(0) - 32);
+          }
+    
+          return `char(${char.charCodeAt(0)})`;
+        }
+      }
 }
