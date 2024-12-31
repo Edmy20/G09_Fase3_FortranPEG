@@ -29,7 +29,7 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
      `
     function peg_${node.id}() result(accept)
         logical :: accept
-        integer :: ${listVars}
+        integer :: ${listVars},temp_cursor
 
         accept = .false.
         ${node.expr.accept(this)}
@@ -53,47 +53,61 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
      */
     visitOpciones(node) {
 
-        const template2 =  node.exprs.map((expr) => expr.accept(this)).join('\n');
-        const template = `
-        do i = 0, ${node.exprs.length}
-            select case(i)
-                ${node.exprs
-                    .map(
-                        (expr, i) => `
-                case(${i})
-                            ${expr.accept(this)}
-                    exit
-                        `
-                    )
-                    .join('\n')}
-                case default
-                    return
-            end select
-        end do
-        `;
-        return template;
+const template90 = `
+do i = 0, ${node.exprs.length}
+    select case(i)
+          
+        ${node.exprs
+            .map((expr, i) => `
+        case(${i})
+            temp_cursor = cursor 
+                ${expr.exprs.map((subExpr) => {
+                        return this.printCondition(subExpr.qty,subExpr.expr.accept(this))
+                }).join('')}
+            exit
+            `)
+            .join('\n')}
+        case default
+            return
+    end select
+end do
+`;
+        return template90
     }
     /**
      * @param {CST.Union} node
      * @this {Visitor}
      */
     visitUnion(node) {
-        return node.exprs.map((expr) => expr.accept(this)).join('\n');
-    }
+        
+let template11 = "";
 
+for (let i = 0; i < node.exprs.length; i++) {
+    template11 += node.exprs[i].accept(this);
+    if (i < node.exprs.length - 1) {
+        template11 += '\nTERMINA';
+    }
+}
+
+    return template11
+    }
+    
+    
     /**
      * @param {CST.Expresion} node
      * @this {Visitor}
      */
     visitExpresion(node) {
 
-        if ( node.qty && //there is a quantifier
+        if ( node.qty && 
             (node.expr instanceof CST.Cadena
             || node.expr instanceof CST.Clase
             || node.expr instanceof CST.Grupo)
         ){
-            node.expr.qty = node.qty // inherit quantifier
+            node.expr.qty = node.qty 
+            
         }
+
 
 
         return node.expr.accept(this);
@@ -104,37 +118,22 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
      */
     visitGrupo(node){
         node.expr.qty = node.qty
-
-        numGrupo2 += 1
-        
-        const template = `
-        do i${numGrupo2-numGrupo} = 0, ${node.expr.exprs.length}
-            select case(i${numGrupo2-numGrupo})
-                ${node.expr.exprs
-                    .map(
-                        (expr, i) => `
-                case(${i})
-                            ${expr.accept(this)}
-                    exit
-                        `
-                    )
-                    .join('\n')}
-                case default
-                    return
-            end select
-        end do
-        `;
-
-        return template
+        const conditions = node.expr.exprs
+        .map(
+            (expr) =>
+                expr.accept(this)
+        )
+        .join(' .or. &\n               ')
+        return conditions
     }
     /**
      * @param {CST.Cadena} node
      * @this {Visitor}
      */
     visitCadena(node) {
-        console.log(node.isCase)
+        //console.log(node.isCase)
         const templateString = `acceptString('${node.val}', ${node.isCase === 'i' ? '.true.' : '.false.'})`;
-        return this.printCondition(node.qty,templateString)
+        return templateString
     }
 
     visitClase(node) {
@@ -157,7 +156,7 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
             characterClass = [...characterClass, ...ranges];
         }
         const condition = characterClass.join(' .or. &\n               '); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
-       return this.printCondition(node.qty,condition)
+       return condition
     }
     
     /**
@@ -207,9 +206,11 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
 
       printCondition(qty,condition){
         //const condition = node.expr.accept(this);
-
+        console.log("QTY: "+ qty)
+        console.log("QTY: "+ condition)
         const templateOneOrMore =  `
                 if (.not. (${condition})) then
+                    cursor = temp_cursor
                     cycle
                 end if
                 do while (.not. cursor > len(input))
@@ -227,11 +228,11 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
         `
         const templateZeroOrOne =  `
                 if (.not. (${condition})) then
-                    
                 end if
         `
         const templateOne =  `
                 if (.not. (${condition})) then
+                    cursor = temp_cursor
                     cycle
                 end if
         `
@@ -245,8 +246,8 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
             default:
                 return templateOne;
         }
+        
       }
-
     getVarDo(numero) {
         let resultado = 'i';
         for (let j = 1; j <= numero; j++) {
@@ -254,4 +255,7 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
         }
         return resultado;
       }
+
+
+    
 }
