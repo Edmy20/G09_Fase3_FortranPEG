@@ -2,6 +2,7 @@ import Visitor from '../visitor/Visitor.js';
 import * as CST from '../visitor/CST.js';
 let numGrupo2 = 0
 let numGrupo
+//const condiciones = []
 /**
  * @typedef {import('../visitor/Visitor.js').default<string>} Visitor
  */
@@ -29,9 +30,10 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
      `
     function peg_${node.id}() result(accept)
         logical :: accept
-        integer :: ${listVars},temp_cursor
-
+        integer :: ${listVars},temp_cursor,tempDO_cursor
+        !print *, "Empieza ${node.id}", cursor
         accept = .false.
+        temp_cursor = cursor 
         ${node.expr.accept(this)}
             ${
                 node.start
@@ -42,6 +44,8 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
                     `
                     : ''
             }
+        !print *, "Termina ${node.id}", cursor
+        temp_cursor = cursor 
         accept = .true.
     end function peg_${node.id}
         `;
@@ -55,12 +59,12 @@ console.log("Número de instancias de CST.Grupo:", numGrupo);
 
 const template90 = `
 do i = 0, ${node.exprs.length}
+    cursor = temp_cursor
     select case(i)
           
         ${node.exprs
             .map((expr, i) => `
         case(${i})
-            temp_cursor = cursor 
                 ${expr.exprs.map((subExpr) => {
                         return this.printCondition(subExpr.qty,subExpr.expr.accept(this))
                 }).join('')}
@@ -72,6 +76,7 @@ do i = 0, ${node.exprs.length}
     end select
 end do
 `;
+        //console.log(condiciones)
         return template90
     }
     /**
@@ -85,7 +90,9 @@ let template11 = "";
 for (let i = 0; i < node.exprs.length; i++) {
     template11 += node.exprs[i].accept(this);
     if (i < node.exprs.length - 1) {
-        template11 += '\nTERMINA';
+        //condiciones.push(template11)
+        template11 += ' .and. &\n               ';
+        
     }
 }
 
@@ -124,7 +131,9 @@ for (let i = 0; i < node.exprs.length; i++) {
                 expr.accept(this)
         )
         .join(' .or. &\n               ')
-        return conditions
+        //condiciones.push("("+conditions+")")
+        
+        return "( "+conditions+" )"
     }
     /**
      * @param {CST.Cadena} node
@@ -206,35 +215,46 @@ for (let i = 0; i < node.exprs.length; i++) {
 
       printCondition(qty,condition){
         //const condition = node.expr.accept(this);
-        console.log("QTY: "+ qty)
-        console.log("QTY: "+ condition)
+        /*console.log("QTY: "+ qty)
+        console.log("QTY: "+ condition)*/
+        //console.log(condiciones)
+        numGrupo2+=1
         const templateOneOrMore =  `
+            if (.not. (${condition})) then
+                cursor = temp_cursor
+                cycle
+            end if
+                
+            tempDO_cursor = cursor
+            do while (.not. cursor > len(input))
                 if (.not. (${condition})) then
-                    cursor = temp_cursor
-                    cycle
+                    cursor = tempDO_cursor
+                    exit
+                else
+                    tempDO_cursor = cursor
                 end if
-                do while (.not. cursor > len(input))
-                    if (.not. (${condition})) then
-                        exit
-                    end if
-                end do
+            end do
         `
         const templateZeroOrMore =  `
-                do while (.not. cursor > len(input))
-                    if (.not. (${condition})) then
-                        exit
-                    end if
-                end do
+            tempDO_cursor = cursor
+            do while (.not. cursor > len(input))
+                if (.not. (${condition})) then
+                    cursor = tempDO_cursor
+                    exit
+                else
+                    tempDO_cursor = cursor
+                end if
+            end do
         `
         const templateZeroOrOne =  `
-                if (.not. (${condition})) then
-                end if
+            if (.not. (${condition})) then
+            end if
         `
         const templateOne =  `
-                if (.not. (${condition})) then
-                    cursor = temp_cursor
-                    cycle
-                end if
+            if (.not. (${condition})) then
+                cursor = temp_cursor
+                cycle
+            end if
         `
         switch (qty) {
             case '+':
@@ -257,5 +277,4 @@ for (let i = 0; i < node.exprs.length; i++) {
       }
 
 
-    
 }

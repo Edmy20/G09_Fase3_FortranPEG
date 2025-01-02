@@ -35,7 +35,7 @@ module parser
             print *, "Error: Expected "//expected//", but found <EOF>"
             call exit(1)
         end if
-        print *, "Error: Expected "//expected//", but found '"//input(cursor:cursor)//"'"
+        print *, "Error: Expected "//expected//", but found '"//input(cursor:cursor)//"'" // " at ", cursor
         call exit(1)
     end subroutine error
 
