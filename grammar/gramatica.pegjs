@@ -60,12 +60,13 @@ union
     return new n.Union(exprs, action);
   }
 
+
 parsingExpression
   = pluck
-  / '!' assertion:(match/predicate) {
+  / '!' assertion:(annotated/predicate) {
     return new n.NegAssertion(assertion);
   }
-  / '&' assertion:(match/predicate) {
+  / '&' assertion:(annotated/predicate) {
     return new n.Assertion(assertion);
   }
   / "!." {
@@ -105,10 +106,11 @@ match
   }
 
 conteo
-  = "|" _ (numero / id:identificador) _ "|"
-  / "|" _ (numero / id:identificador)? _ ".." _ (numero / id2:identificador)? _ "|"
-  / "|" _ (numero / id:identificador)? _ "," _ opciones _ "|"
-  / "|" _ (numero / id:identificador)? _ ".." _ (numero / id2:identificador)? _ "," _ opciones _ "|"
+  = "|" _ value:(numero / id:identificador) _ "|" { return text(); }
+  / "|" _ start:(numero / id:identificador)? _ ".." _ end:(numero / id2:identificador)? _ "|"{ return text(); }
+  / "|" _ count:(numero / id:identificador)? _ "," _ options:opciones _ "|"{ return text(); }
+  / "|" _ start:(numero / id:identificador)? _ ".." _ end:(numero / id2:identificador)? _ "," _ options:opciones _ "|"{ return text(); }
+
 
 predicate
   = "{" [ \t\n\r]* returnType:predicateReturnType code:$[^}]* "}" {

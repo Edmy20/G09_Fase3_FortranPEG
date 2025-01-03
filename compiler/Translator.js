@@ -181,7 +181,7 @@ export default class FortranTranslator {
      */
     visitAnnotated(node) {
 
-        if (node.qty && typeof node.qty === 'string') {
+        if (node.qty && typeof node.qty === 'string' && node.qty.length === 1) {
             if (node.expr instanceof CST.Identificador) {
                 // TODO: Implement quantifiers (i.e., ?, *, +)
                 return `${getExprId(
@@ -195,8 +195,34 @@ export default class FortranTranslator {
                 destination: getExprId(this.currentChoice, this.currentExpr),
             });
         } else if (node.qty) {
+
+      /*let matchSingle = /^\|(\d+|\w+)\|$/.exec(node.qty);
+      let matchRange = /^\|(\d+|\w+)?\.\.(\d+|\w+)?\|$/.exec(node.qty);
+      let matchList = /^\|(\d+|\w+)?,(.*?)\|$/.exec(node.qty);
+      let matchRangeList = /^\|(\d+|\w+)?\.\.(\d+|\w+)?,(.*?)\|$/.exec(node.qty);
+      let conteo = ''
+      if (matchSingle) {
+        conteo = { type: "single", value: matchSingle[1] };
+      } else if (matchRange) {
+        conteo= { type: "range", start: matchRange[1], end: matchRange[2] };
+      } else if (matchList) {
+        conteo = { type: "list", count: matchList[1], options: matchList[2] };
+      } else if (matchRangeList) {
+        conteo = { type: "rangeList", start: matchRangeList[1], end: matchRangeList[2], options: matchRangeList[3] };
+      }*/
+            const conteo = this.getConteo(node)
+            const valor = node.expr.accept(this)
+            if(valor.startsWith("accept")){
+                const matchConteo = this.handleQty(conteo,valor)
+                console.log(matchConteo)
+
+                return matchConteo
+            }else{
+
             // TODO: Implement repetitions (e.g., |3|, |1..3|, etc...)
-            throw new Error('Repetitions not implemented.');
+            console.log(node.qty)
+            console.log(this.getConteo(node))
+            throw new Error('Repetitions not implemented.');}
         } else {
             if (node.expr instanceof CST.Identificador) {
                 return `${getExprId(
@@ -207,6 +233,10 @@ export default class FortranTranslator {
                 const nodoGrupal = node.expr.accept(this)
                 console.log(nodoGrupal)
                 return nodoGrupal
+            }else if(node.expr instanceof CST.NegAssertion){
+                const neg = node.expr.accept(this)
+                console.log(neg)
+                console.log("aqui")
             }
             return Template.strExpr({
                 expr: node.expr.accept(this),
@@ -234,7 +264,17 @@ export default class FortranTranslator {
      * @this {Visitor}
      */
     visitAssertion(node) {
-        throw new Error('Method not implemented.');
+        //const afirm = node.accept(this)
+        const afirm = node.assertion.expr.accept(this)
+        if(afirm.startsWith("accept")){
+            const afirmacion = 
+            `
+            if(.not. (${afirm})) cycle
+            `
+            return afirmacion
+        }
+        console.log(afirm)
+        return node.assertion.accept(this)
     }
 
     /**
@@ -242,7 +282,17 @@ export default class FortranTranslator {
      * @this {Visitor}
      */
     visitNegAssertion(node) {
-        throw new Error('Method not implemented.');
+        //const neg = node.accept(this)
+        const neg = node.assertion.expr.accept(this)
+        if(neg.startsWith("accept")){
+            const negacion = 
+            `
+            if(${neg}) cycle
+            `
+            return negacion
+        }
+        console.log(neg)
+        return node.assertion.accept(this)
     }
 
     /**
@@ -367,5 +417,128 @@ export default class FortranTranslator {
           return char.charCodeAt(0);
         }
       }
+      esNumero(cadena) {
+        return !isNaN(Number(cadena));
+    }
+    
+
+    
+
+      getConteo(node) {
+        let matchSingle = /^\|(\d+|\w+)\|$/.exec(node.qty);
+        let matchRange = /^\|(\d+|\w+)?\.\.(\d+|\w+)?\|$/.exec(node.qty);
+        let matchList = /^\|(\d+|\w+)?,(.*?)\|$/.exec(node.qty);
+        let matchRangeList = /^\|(\d+|\w+)?\.\.(\d+|\w+)?,(.*?)\|$/.exec(node.qty);
+        let conteo = ''
+        if (matchSingle) {
+          conteo = { type: "single", value: matchSingle[1] };
+        } else if (matchRange) {
+          conteo= { type: "range", start: matchRange[1], end: matchRange[2] };
+        } else if (matchList) {
+          conteo = { type: "list", count: matchList[1], options: matchList[2] };
+        } else if (matchRangeList) {
+          conteo = { type: "rangeList", start: matchRangeList[1], end: matchRangeList[2], options: matchRangeList[3] };
+        }
+        return conteo
+    }
+
+    handleQty(conteo, valor) {
+        switch (conteo.type) {
+            case 'single':
+                let single = "  lexemeStart = cursor\n";
+                if (this.esNumero(conteo.value)) {
+
+                    let repeticionrt = Number(conteo.value);
+                    for (let i = 0; i < repeticionrt; i++) { 
+                        single += `               if (.not. (${valor})) cycle\n`;  
+                    }
+                    single += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()`
+                    return single
+                }
+                return ''
+                break
+            case 'range':
+                let range = "  lexemeStart = cursor\n";
+                
+                if (this.esNumero(conteo.start)) {
+
+                    let repeticionrt = Number(conteo.start);
+                    for (let i = 0; i < repeticionrt; i++) { 
+                        range += `               if (.not. (${valor})) cycle\n`;  
+                    }
+                    if (this.esNumero(conteo.end)){
+                        let repeticionrt2 = Number(conteo.end);
+                        for (let i = 0; i < repeticionrt2-repeticionrt; i++) {  
+                            range += `               if (${valor}) then
+                end if\n`;  
+                        }
+                        range += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()`
+                        return range
+                    }
+
+                    
+                    return ''
+                }
+                return ''
+           
+                break;
+            case 'list':
+
+                let list = "  lexemeStart = cursor\n";
+                if (this.esNumero(conteo.count)) {
+
+                    let repeticionrt = Number(conteo.count);
+                    for (let i = 0; i < repeticionrt; i++) {  
+                        list += `               if (.not. (${valor})) cycle\n`;
+                        if(i <= repeticionrt-2){
+                            list += `               if(.not. acceptString(${conteo.options}, .false.)) cycle\n`;
+                        }
+                        
+                    }
+                    list += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()`
+                    return list
+                }
+                return ''
+                break;
+            case 'rangeList':
+
+ 
+                let rangeList = "  lexemeStart = cursor\n";
+                
+                if (this.esNumero(conteo.start)) {
+
+                    let repeticionrt = Number(conteo.start);
+                    for (let i = 0; i < repeticionrt; i++) {  
+                        rangeList += `               if (.not. (${valor})) cycle\n`;
+                        if(i <= repeticionrt-2){
+                            rangeList += `               if(.not. acceptString(${conteo.options}, .false.)) cycle\n`;
+                        }    
+                        }
+                    if (this.esNumero(conteo.end)){
+                        let repeticionrt2 = Number(conteo.end);
+                        for (let i = 0; i < repeticionrt2-repeticionrt; i++) {  
+                            rangeList += `                lexemeEnd = cursor\n` 
+                            rangeList += `                if(.not. (acceptString(${conteo.options}, .false.) .and. (${valor}))) then
+                    cursor = lexemeEnd        
+                end if\n`;  
+                        }
+                        rangeList += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()`
+                        return rangeList
+                    }
+
+                    
+                    return ''
+                }
+                return ''
+            default:
+                console.log(`Unknown qty type: ${qty.type}`);
+                return ''
+                break;
+        }
+    }
+    
+   
+
+    
 
 }
