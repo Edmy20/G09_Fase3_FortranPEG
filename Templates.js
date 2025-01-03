@@ -31,11 +31,17 @@ module parser
     function parse(str) result(res)
         character(len=:), allocatable :: str
         ${data.startingRuleType} :: res
+        ${data.startingRuleType} :: resultado
+        logical :: success
 
         input = str
         cursor = 1
-
-        res = ${data.startingRuleId}()
+        call ${data.startingRuleId}(resultado,success)
+        if (success) then
+            res = resultado
+        else
+            call pegError()
+        end if
     end function parse
 
     ${data.rules.join('\n')}
@@ -232,14 +238,16 @@ end module parser
  * @returns
  */
 export const rule = (data) => `
-    function peg_${data.id}() result (res)
-        ${data.returnType} :: res
+    subroutine peg_${data.id}(res,success)
+        ${data.returnType}, intent(out) :: res
+        logical, intent(out) :: success
         ${data.exprDeclarations.join('\n')}
         integer :: i
 
         savePoint = cursor
+        success = .false.
         ${data.expr}
-    end function peg_${data.id}
+    end subroutine peg_${data.id}
 `;
 
 /**
@@ -354,7 +362,7 @@ export const strExpr = (data) => {
  */
 export const strResultExpr = (data) => `
                 res = ${data.exprs.map((expr) => `toStr(${expr})`).join('//')}
-`;
+                success = .true.`;
 
 /**
  *
@@ -365,7 +373,10 @@ export const strResultExpr = (data) => `
  * @returns
  */
 export const fnResultExpr = (data) => `
-                res = ${data.fnId}(${data.exprs.join(', ')})
+                call ${data.fnId}(${data.exprs.join(', ')}, res, success)
+                if(success) then
+                    exit
+                end if
 `;
 
 /**
@@ -383,10 +394,12 @@ export const fnResultExpr = (data) => `
 export const action = (data) => {
     const signature = data.signature.join(', ');
     return `
-    function peg_${data.ruleId}_f${data.choice}(${signature}) result(res)
+    subroutine peg_${data.ruleId}_f${data.choice}(${signature},res, success)
         ${data.paramDeclarations.join('\n')}
-        ${data.returnType} :: res
+        ${data.returnType}, intent(out) :: res
+        logical, intent(out) :: success
         ${data.code}
-    end function peg_${data.ruleId}_f${data.choice}
+        success = .true.
+     end subroutine peg_${data.ruleId}_f${data.choice}
     `;
 };

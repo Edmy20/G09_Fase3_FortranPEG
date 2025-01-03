@@ -184,10 +184,10 @@ export default class FortranTranslator {
         if (node.qty && typeof node.qty === 'string' && node.qty.length === 1) {
             if (node.expr instanceof CST.Identificador) {
                 // TODO: Implement quantifiers (i.e., ?, *, +)
-                return `${getExprId(
+                return `call ${node.expr.accept(this)}(${getExprId(
                     this.currentChoice,
                     this.currentExpr
-                )} = ${node.expr.accept(this)}`;
+                )}, success)`;
             }
             return Template.strExpr({
                 quantifier: node.qty,
@@ -225,10 +225,9 @@ export default class FortranTranslator {
             throw new Error('Repetitions not implemented.');}
         } else {
             if (node.expr instanceof CST.Identificador) {
-                return `${getExprId(
-                    this.currentChoice,
-                    this.currentExpr
-                )} = ${node.expr.accept(this)}`;
+                
+                return `call ${node.expr.accept(this)}(${getExprId(this.currentChoice,this.currentExpr)},success)
+                if (.not. success) cycle`;
             }else if(node.expr instanceof CST.Grupo){
                 const nodoGrupal = node.expr.accept(this)
                 console.log(nodoGrupal)
@@ -381,7 +380,7 @@ export default class FortranTranslator {
      * @this {Visitor}
      */
     visitIdentificador(node) {
-        return getRuleId(node.id) + '()';
+        return getRuleId(node.id);
     }
 
     /**
