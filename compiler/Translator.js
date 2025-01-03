@@ -85,6 +85,18 @@ export default class FortranTranslator {
                     
                         const exprSingle = `${exprType} :: expr_${i}_${j}\n`
 
+                        if(label.labeledExpr.annotatedExpr.qty){
+                            const exprQty = (expr instanceof CST.Identificador)
+                        ? getReturnType(
+                            getActionId(expr.id, i),
+                            this.actionReturnTypes
+                          )
+                        : 'character(len=:), allocatable';
+
+                        const exprQtyEnd = `${exprQty} :: expr_${i}_${j}_concat\n`
+                        return exprSingle + exprQtyEnd
+                    
+                        }
                         return exprSingle
                     })
             ),
@@ -199,6 +211,7 @@ export default class FortranTranslator {
                 const tempIdQty = Template.idExpr({
                     quantifier:node.qty,
                     ruleId: idRule,
+                    tempVar: getReturnType(idRule, this.actionReturnTypes) || 'character(len=:), allocatable',
                     choice: this.currentChoice.toString()+this.currentExpr.toString(),
                     exprName: expName,
                     })
@@ -218,7 +231,7 @@ export default class FortranTranslator {
             const valor = node.expr.accept(this)
             if(valor.startsWith("accept")){
                 const matchConteo = this.handleQty(conteo,valor)
-                console.log(matchConteo)
+                //console.log(matchConteo)
 
                 return matchConteo
             }
@@ -499,7 +512,8 @@ export default class FortranTranslator {
                         }
                         
                     }
-                    list += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()`
+                    list += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()\n`
+                    list += `               call clean_string(${getExprId(this.currentChoice, this.currentExpr)},${conteo.options})\n`
                     return list
                 }
                 return ''
@@ -526,7 +540,9 @@ export default class FortranTranslator {
                     cursor = lexemeEnd        
                 end if\n`;  
                         }
-                        rangeList += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()`
+                        rangeList += `               ${getExprId(this.currentChoice, this.currentExpr)}=consumeInput()\n`
+                        rangeList += `               call clean_string(${getExprId(this.currentChoice, this.currentExpr)},${conteo.options})\n`
+                        
                         return rangeList
                     }
 

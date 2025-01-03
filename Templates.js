@@ -226,6 +226,26 @@ module parser
     
     end function list_to_string
 
+    subroutine clean_string(texto, cadena)
+        character(len=*), intent(inout) :: texto
+        character(len=*), intent(in) :: cadena
+        integer :: start, end_pos
+        character(len=:), allocatable :: temp
+
+        temp = texto
+        start = index(temp, cadena)
+    
+        do while (start > 0)
+            end_pos = start + len(cadena) - 1
+            temp = temp(:start-1) // temp(end_pos+1:)
+            start = index(temp, cadena)
+        end do
+
+        texto = temp
+    end subroutine clean_string
+
+
+
 
 end module parser
 `;
@@ -358,6 +378,10 @@ export const strExpr = (data) => {
 };
 
 export const idExpr = (data) => {
+    let endCad = ""
+    if('character(len=:), allocatable' == data.tempVar){
+        endCad = `${data.exprName} = ${data.exprName}_concat // ${data.exprName} `
+    }
     if (!data.quantifier) {
         return `call ${data.ruleId}(${data.exprName},success,.false.)
         if (.not. success) cycle`;
@@ -366,14 +390,16 @@ export const idExpr = (data) => {
         case '+':
             return `call ${data.ruleId}(${data.exprName},success, .false.)
                 if (.not. success) cycle
-                call qty_${data.ruleId}_f${data.choice}(${data. exprName}, success)`;
+                ${data.exprName}_concat = ${data.exprName}
+                call qty_${data.ruleId}_f${data.choice}(${data.exprName}, success)
+                ${endCad}`;
             case '*':
                 return `            
-                call qty_${data.ruleId}_f${data.choice}(${data. exprName}, success)
+                call qty_${data.ruleId}_f${data.choice}(${data.exprName}, success)
                 if (.not. success) then
                 end if` ;
             case '?':
-                return `call ${data.ruleId}(${data. exprName},success, .true.)
+                return `call ${data.ruleId}(${data.exprName},success, .true.)
                 if (.not. success) then
                 end if`;
         default:
