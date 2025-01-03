@@ -49,7 +49,7 @@ union
     const labeledExprs = exprs
         .filter((expr) => expr instanceof n.Pluck)
         .filter((expr) => expr.labeledExpr.label);
-    if (labeledExprs.length > 0) {
+      if (action && labeledExprs.length > 0) {
         action.params = labeledExprs.reduce((args, labeled) => {
             const expr = labeled.labeledExpr.annotatedExpr.expr;
             args[labeled.labeledExpr.label] =
@@ -57,6 +57,7 @@ union
             return args;
         }, {});
     }
+    
     return new n.Union(exprs, action);
   }
 
@@ -110,7 +111,10 @@ conteo
   / "|" _ start:(numero / id:identificador)? _ ".." _ end:(numero / id2:identificador)? _ "|"{ return text(); }
   / "|" _ count:(numero / id:identificador)? _ "," _ options:opciones _ "|"{ return text(); }
   / "|" _ start:(numero / id:identificador)? _ ".." _ end:(numero / id2:identificador)? _ "," _ options:opciones _ "|"{ return text(); }
-
+  / "|" _ value:predicate _ "|" 
+  / "|" _ start:predicate? _ ".." _ end:predicate? _ "|"
+  / "|" _ count:predicate? _ "," _ options:opciones _ "|"
+  / "|" _ start:predicate? _ ".." _ end:predicate? _ "," _ options:opciones _ "|"
 
 predicate
   = "{" [ \t\n\r]* returnType:predicateReturnType code:$[^}]* "}" {
