@@ -84,12 +84,8 @@ export default class FortranTranslator {
                         : 'character(len=:), allocatable';
                     
                         const exprSingle = `${exprType} :: expr_${i}_${j}\n`
-                        const expArr = ('character(len=:), allocatable' === exprType)
-                        ? `${exprType} :: expr_${i}_${j}_arr(:)\n`
-                        : `${exprType}, allocatable :: expr_${i}_${j}_arr(:)\n`;
-                    
-                        
-                        return exprSingle + expArr
+
+                        return exprSingle
                     })
             ),
             expr: node.expr.accept(this),
@@ -183,11 +179,32 @@ export default class FortranTranslator {
 
         if (node.qty && typeof node.qty === 'string' && node.qty.length === 1) {
             if (node.expr instanceof CST.Identificador) {
-                // TODO: Implement quantifiers (i.e., ?, *, +)
-                return `call ${node.expr.accept(this)}(${getExprId(
-                    this.currentChoice,
-                    this.currentExpr
-                )}, success)`;
+                const idRule = node.expr.accept(this)
+                //expr_${choice}_${index}_concat
+                const expName = getExprId(this.currentChoice,this.currentExpr)
+                const expConcat = getExprId(this.currentChoice,this.currentExpr)+'_concat'
+
+
+                const subroutineQty = Template.actionQty({
+                    ruleId: idRule,
+                    choice: this.currentChoice.toString()+this.currentExpr.toString(),
+                    exprName: expName,
+                    tempVar: getReturnType(idRule, this.actionReturnTypes) || 'character(len=:), allocatable',
+                    
+                    expConc: expConcat 
+                    })
+                this.actions.push(subroutineQty)
+
+
+                const tempIdQty = Template.idExpr({
+                    quantifier:node.qty,
+                    ruleId: idRule,
+                    choice: this.currentChoice.toString()+this.currentExpr.toString(),
+                    exprName: expName,
+                    })
+
+                return tempIdQty
+
             }
             return Template.strExpr({
                 quantifier: node.qty,
@@ -196,20 +213,7 @@ export default class FortranTranslator {
             });
         } else if (node.qty) {
 
-      /*let matchSingle = /^\|(\d+|\w+)\|$/.exec(node.qty);
-      let matchRange = /^\|(\d+|\w+)?\.\.(\d+|\w+)?\|$/.exec(node.qty);
-      let matchList = /^\|(\d+|\w+)?,(.*?)\|$/.exec(node.qty);
-      let matchRangeList = /^\|(\d+|\w+)?\.\.(\d+|\w+)?,(.*?)\|$/.exec(node.qty);
-      let conteo = ''
-      if (matchSingle) {
-        conteo = { type: "single", value: matchSingle[1] };
-      } else if (matchRange) {
-        conteo= { type: "range", start: matchRange[1], end: matchRange[2] };
-      } else if (matchList) {
-        conteo = { type: "list", count: matchList[1], options: matchList[2] };
-      } else if (matchRangeList) {
-        conteo = { type: "rangeList", start: matchRangeList[1], end: matchRangeList[2], options: matchRangeList[3] };
-      }*/
+
             const conteo = this.getConteo(node)
             const valor = node.expr.accept(this)
             if(valor.startsWith("accept")){
@@ -217,17 +221,18 @@ export default class FortranTranslator {
                 console.log(matchConteo)
 
                 return matchConteo
-            }else{
+            }
 
-            // TODO: Implement repetitions (e.g., |3|, |1..3|, etc...)
-            console.log(node.qty)
-            console.log(this.getConteo(node))
-            throw new Error('Repetitions not implemented.');}
+            
+
         } else {
             if (node.expr instanceof CST.Identificador) {
-                
-                return `call ${node.expr.accept(this)}(${getExprId(this.currentChoice,this.currentExpr)},success)
-                if (.not. success) cycle`;
+                const tempIdQty = Template.idExpr({
+                    ruleId: node.expr.accept(this),
+                    exprName: getExprId(this.currentChoice,this.currentExpr),
+                    })
+                return tempIdQty
+
             }else if(node.expr instanceof CST.Grupo){
                 const nodoGrupal = node.expr.accept(this)
                 console.log(nodoGrupal)

@@ -36,11 +36,11 @@ module parser
 
         input = str
         cursor = 1
-        call ${data.startingRuleId}(resultado,success)
+        call ${data.startingRuleId}(resultado,success,.false.)
         if (success) then
             res = resultado
         else
-            call pegError()
+            call pegError(.false.)
         end if
     end function parse
 
@@ -159,9 +159,12 @@ module parser
         end if
     end subroutine pegError2
 
-    subroutine pegError()
+    subroutine pegError(anulable)
+        logical, intent(in) :: anulable
+        if(.not. anulable) then
         print '(A,I1,A)', "Error at ", cursor, ": '"//input(cursor:cursor)//"'"
         call exit(1)
+        end if
     end subroutine pegError
 
     function intToStr(int) result(cast)
@@ -238,9 +241,10 @@ end module parser
  * @returns
  */
 export const rule = (data) => `
-    subroutine peg_${data.id}(res,success)
+    subroutine peg_${data.id}(res,success,anulable)
         ${data.returnType}, intent(out) :: res
         logical, intent(out) :: success
+        logical, intent(in) :: anulable
         ${data.exprDeclarations.join('\n')}
         integer :: i
 
@@ -269,7 +273,7 @@ export const election2 = (data) => `
             `
             )}
             case default
-                call pegError()
+                call pegError(anulable)
             end select
         end do
 `;
@@ -284,7 +288,7 @@ export const election = (data) => `
                 exit
         `).join('\n')}
         case default
-            call pegError()
+            call pegError(anulable)
         end select
     end do
 `;
@@ -353,6 +357,29 @@ export const strExpr = (data) => {
     }
 };
 
+export const idExpr = (data) => {
+    if (!data.quantifier) {
+        return `call ${data.ruleId}(${data.exprName},success,.false.)
+        if (.not. success) cycle`;
+    }
+    switch (data.quantifier) {
+        case '+':
+            return `call ${data.ruleId}(${data.exprName},success, .false.)
+                if (.not. success) cycle
+                call qty_${data.ruleId}_f${data.choice}(${data. exprName}, success)`;
+            case '*':
+                return `            
+                call qty_${data.ruleId}_f${data.choice}(${data. exprName}, success)
+                if (.not. success) then
+                end if` ;
+            case '?':
+                return `call ${data.ruleId}(${data. exprName},success, .true.)
+                if (.not. success) then
+                end if`;
+        default:
+                return ''
+    }
+};
 /**
  *
  * @param {{
@@ -401,5 +428,31 @@ export const action = (data) => {
         ${data.code}
         success = .true.
      end subroutine peg_${data.ruleId}_f${data.choice}
+    `;
+};
+
+export const actionQty = (data) => {
+    let endConcat = ""
+    if(data.tempVar === 'character(len=:), allocatable'){
+        endConcat = `           ${data.exprName}_concat = ${data.exprName}_concat // toStr(${data.exprName})`
+    }
+    return `
+    subroutine qty_${data.ruleId}_f${data.choice}(res, success)
+    ${data.tempVar},intent(out) :: res
+    logical, intent(out) :: success
+    ${data.tempVar} :: ${data.exprName}
+    ${data.tempVar} :: ${data.exprName}_concat
+
+
+    do
+        call ${data.ruleId}(${data.exprName}, success,.true.)
+        if (.not. success) exit
+        ${endConcat}
+    end do
+
+    ! Asignar el valor concatenado final a res
+    res = ${data.exprName}_concat
+    success = .true.
+end subroutine qty_${data.ruleId}_f${data.choice}
     `;
 };
