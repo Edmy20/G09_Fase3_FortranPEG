@@ -1,150 +1,300 @@
-import Visitor from '../visitor/Visitor.js';
 import * as CST from '../visitor/CST.js';
-let numGrupo2 = 0
-let numGrupo
-//const condiciones = []
-/**
- * @typedef {import('../visitor/Visitor.js').default<string>} Visitor
- */
+import * as Template from '../Templates.js';
+import { getActionId, getReturnType, getExprId, getRuleId } from './utils.js';
+let condiciones = []
+/** @typedef {import('../visitor/Visitor.js').default<string>} Visitor */
+/** @typedef {import('../visitor/Visitor.js').ActionTypes} ActionTypes*/
+
 /**
  * @implements {Visitor}
  */
 export default class FortranTranslator {
+    /** @type {ActionTypes} */
+    actionReturnTypes;
+    /** @type {string[]} */
+    actions;
+    /** @type {boolean} */
+    translatingStart;
+    /** @type {string} */
+    currentRule;
+    /** @type {number} */
+    currentChoice;
+    /** @type {number} */
+    currentExpr;
+
     /**
-     * @param {CST.Producciones} node
+     *
+     * @param {ActionTypes} returnTypes
+     */
+    constructor(returnTypes) {
+        this.actionReturnTypes = returnTypes;
+        this.actions = [];
+        this.translatingStart = false;
+        this.currentRule = '';
+        this.currentChoice = 0;
+        this.currentExpr = 0;
+    }
+
+    /**
+     * @param {CST.Grammar} node
      * @this {Visitor}
      */
-    visitProducciones(node) {
-        
-        numGrupo = node.expr.exprs
-  .flatMap(expr => expr.exprs)  
-  .filter(expr => expr.expr instanceof CST.Grupo)  
-  .length;  
+    visitGrammar(node) {
+        const rules = node.rules.map((rule) => rule.accept(this));
 
-console.log("Número de instancias de CST.Grupo:", numGrupo);
-
-        let listVars = this.getVarDo(numGrupo)
-        numGrupo2 = 0
-
-        const templateProd = 
-     `
-    function peg_${node.id}() result(accept)
-        logical :: accept
-        integer :: ${listVars},temp_cursor,tempDO_cursor
-        !print *, "Empieza ${node.id}", cursor
-        accept = .false.
-        temp_cursor = cursor 
-        ${node.expr.accept(this)}
-            ${
-                node.start
-                    ? `
-        if (.not. acceptEOF()) then
-            return
-        end if
-                    `
-                    : ''
-            }
-        !print *, "Termina ${node.id}", cursor
-        temp_cursor = cursor 
-        accept = .true.
-    end function peg_${node.id}
-        `;
-    return templateProd
+        return Template.main({
+            beforeContains: node.globalCode?.before ?? '',
+            afterContains: node.globalCode?.after ?? '',
+            startingRuleId: getRuleId(node.rules[0].id),
+            startingRuleType: getReturnType(
+                getActionId(node.rules[0].id, 0),
+                this.actionReturnTypes
+            ),
+            actions: this.actions,
+            rules,
+        });
     }
+
+    /**
+     * @param {CST.Regla} node
+     * @this {Visitor}
+     */
+    visitRegla(node) {
+        this.currentRule = node.id;
+        this.currentChoice = 0;
+
+        if (node.start) this.translatingStart = true;
+
+        const ruleTranslation = Template.rule({
+            id: node.id,
+            returnType: getReturnType(
+                getActionId(node.id, this.currentChoice),
+                this.actionReturnTypes
+            ),
+            exprDeclarations: node.expr.exprs.flatMap((election, i) =>
+                election.exprs
+                    .filter((expr) => expr instanceof CST.Pluck)
+                    .map((label, j) => {
+                        const expr = label.labeledExpr.annotatedExpr.expr;
+                        const exprType = (expr instanceof CST.Identificador)
+                        ? getReturnType(
+                            getActionId(expr.id, i),
+                            this.actionReturnTypes
+                          )
+                        : 'character(len=:), allocatable';
+                    
+                        const exprSingle = `${exprType} :: expr_${i}_${j}\n`
+                        const expArr = ('character(len=:), allocatable' === exprType)
+                        ? `${exprType} :: expr_${i}_${j}_arr(:)\n`
+                        : `${exprType}, allocatable :: expr_${i}_${j}_arr(:)\n`;
+                    
+                        
+                        return exprSingle + expArr
+                    })
+            ),
+            expr: node.expr.accept(this),
+        });
+
+        this.translatingStart = false;
+
+        return ruleTranslation;
+    }
+
     /**
      * @param {CST.Opciones} node
      * @this {Visitor}
      */
     visitOpciones(node) {
-
-const template90 = `
-do i = 0, ${node.exprs.length}
-    cursor = temp_cursor
-    select case(i)
-          
-        ${node.exprs
-            .map((expr, i) => `
-        case(${i})
-                ${expr.exprs.map((subExpr) => {
-                        return this.printCondition(subExpr.qty,subExpr.expr.accept(this))
-                }).join('')}
-            exit
-            `)
-            .join('\n')}
-        case default
-            return
-    end select
-end do
-`;
-        //console.log(condiciones)
-        return template90
+        return Template.election({
+            exprs: node.exprs.map((expr) => {
+                const translation = expr.accept(this);
+                this.currentChoice++;
+                return translation;
+            }),
+        });
     }
+
     /**
      * @param {CST.Union} node
      * @this {Visitor}
      */
     visitUnion(node) {
-        
-let template11 = "";
+        const matchExprs = node.exprs.filter(
+            (expr) => expr instanceof CST.Pluck
+        );
+        const exprVars = matchExprs.map(
+            (_, i) => `expr_${this.currentChoice}_${i}`
+        );
 
-for (let i = 0; i < node.exprs.length; i++) {
-    template11 += node.exprs[i].accept(this);
-    if (i < node.exprs.length - 1) {
-        //condiciones.push(template11)
-        template11 += ' .and. &\n               ';
-        
-    }
-}
+        /** @type {string[]} */
+        let neededExprs;
+        /** @type {string} */
+        let resultExpr;
+        const currFnId = getActionId(this.currentRule, this.currentChoice);
+        if (currFnId in this.actionReturnTypes) {
+            neededExprs = exprVars.filter(
+                (_, i) => matchExprs[i].labeledExpr.label
+            );
+            resultExpr = Template.fnResultExpr({
+                fnId: getActionId(this.currentRule, this.currentChoice),
+                exprs: neededExprs.length > 0 ? neededExprs : [],
+            });
+        } else {
+            neededExprs = exprVars.filter((_, i) => matchExprs[i].pluck);
+            resultExpr = Template.strResultExpr({
+                exprs: neededExprs.length > 0 ? neededExprs : exprVars,
+            });
+        }
+        this.currentExpr = 0;
 
-    return template11
+        if (node.action) this.actions.push(node.action.accept(this));
+        return Template.union({
+            exprs: node.exprs.map((expr) => {
+                const translation = expr.accept(this);
+                if (expr instanceof CST.Pluck) this.currentExpr++;
+                return translation;
+            }),
+            startingRule: this.translatingStart,
+            resultExpr,
+        });
     }
-    
-    
+
     /**
-     * @param {CST.Expresion} node
+     * @param {CST.Pluck} node
      * @this {Visitor}
      */
-    visitExpresion(node) {
-
-        if ( node.qty && 
-            (node.expr instanceof CST.Cadena
-            || node.expr instanceof CST.Clase
-            || node.expr instanceof CST.Grupo)
-        ){
-            node.expr.qty = node.qty 
-            
-        }
-
-
-
-        return node.expr.accept(this);
+    visitPluck(node) {
+        return node.labeledExpr.accept(this);
     }
-        /**
+
+    /**
+     * @param {CST.Label} node
+     * @this {Visitor}
+     */
+    visitLabel(node) {
+        return node.annotatedExpr.accept(this);
+    }
+
+    /**
+     * @param {CST.Annotated} node
+     * @this {Visitor}
+     */
+    visitAnnotated(node) {
+
+        if (node.qty && typeof node.qty === 'string') {
+            if (node.expr instanceof CST.Identificador) {
+                // TODO: Implement quantifiers (i.e., ?, *, +)
+                return `${getExprId(
+                    this.currentChoice,
+                    this.currentExpr
+                )} = ${node.expr.accept(this)}`;
+            }
+            return Template.strExpr({
+                quantifier: node.qty,
+                expr: node.expr.accept(this),
+                destination: getExprId(this.currentChoice, this.currentExpr),
+            });
+        } else if (node.qty) {
+            // TODO: Implement repetitions (e.g., |3|, |1..3|, etc...)
+            throw new Error('Repetitions not implemented.');
+        } else {
+            if (node.expr instanceof CST.Identificador) {
+                return `${getExprId(
+                    this.currentChoice,
+                    this.currentExpr
+                )} = ${node.expr.accept(this)}`;
+            }else if(node.expr instanceof CST.Grupo){
+                const nodoGrupal = node.expr.accept(this)
+                console.log(nodoGrupal)
+                return nodoGrupal
+            }
+            return Template.strExpr({
+                expr: node.expr.accept(this),
+                destination: getExprId(this.currentChoice, this.currentExpr),
+            });
+        }
+    }
+
+    printConditions(qty,condicionesList){
+        for (let i = 0; i < condicionesLis.length; i++) {
+            console.log(condicionesList[i]);
+        }
+        if (qty && typeof qty === 'string') {
+
+            for (let i = 0; i < condicionesLis.length; i++) {
+                console.log(condicionesList[i]);
+            }
+            
+    }
+    }
+
+
+    /**
+     * @param {CST.Assertion} node
+     * @this {Visitor}
+     */
+    visitAssertion(node) {
+        throw new Error('Method not implemented.');
+    }
+
+    /**
+     * @param {CST.NegAssertion} node
+     * @this {Visitor}
+     */
+    visitNegAssertion(node) {
+        throw new Error('Method not implemented.');
+    }
+
+    /**
+     * @param {CST.Predicate} node
+     * @this {Visitor}
+     */
+    visitPredicate(node) {
+        return Template.action({
+            ruleId: this.currentRule,
+            choice: this.currentChoice,
+            signature: Object.keys(node.params),
+            returnType: node.returnType,
+            paramDeclarations: Object.entries(node.params).map(
+                ([label, ruleId]) =>
+                    `${getReturnType(
+                        getActionId(ruleId, this.currentChoice),
+                        this.actionReturnTypes
+                    )} :: ${label}`
+            ),
+            code: node.code,
+        });
+    }
+
+ 
+    /**
      * @param {CST.Grupo} node
      * @this {Visitor}
      */
     visitGrupo(node){
-        node.expr.qty = node.qty
+ 
         const conditions = node.expr.exprs
         .map(
             (expr) =>
                 expr.accept(this)
         )
-        .join(' .or. &\n               ')
-        //condiciones.push("("+conditions+")")
+        .join('.or.')
         
         return "( "+conditions+" )"
     }
     /**
-     * @param {CST.Cadena} node
+     * @param {CST.String} node
      * @this {Visitor}
      */
     visitCadena(node) {
-        //console.log(node.isCase)
-        const templateString = `acceptString('${node.val}', ${node.isCase === 'i' ? '.true.' : '.false.'})`;
+        const templateString = `acceptString('${node.val}', ${node.isCase == true ? '.true.' : '.false.'})`;
         return templateString
     }
 
+    /**
+     * @param {CST.Clase} node
+     * @this {Visitor}
+     */
     visitClase(node) {
         // [abc0-9A-Z]
         let characterClass = [];
@@ -156,10 +306,10 @@ for (let i = 0; i < node.exprs.length; i++) {
             .map((range) => {
                 let rangeStr = range.accept(this);
                 // Agregar el tercer parámetro y el paréntesis de cierre
-                return `${rangeStr}, ${node.isCase === 'i' ? '.true.' : '.false.'})`;
+                return `${rangeStr}, ${node.isCase == true  ? '.true.' : '.false.'})`;
             });
         if (set.length !== 0) {
-            characterClass = [`acceptSet([${set.join(',')}], ${node.isCase === 'i' ? '.true.' : '.false.'})`];
+            characterClass = [`acceptSet([${set.join(',')}], ${node.isCase == true  ? '.true.' : '.false.'})`];
         }
         if (ranges.length !== 0) {
             characterClass = [...characterClass, ...ranges];
@@ -167,7 +317,7 @@ for (let i = 0; i < node.exprs.length; i++) {
         const condition = characterClass.join(' .or. &\n               '); // acceptSet(['a','b','c']) .or. acceptRange('0','9') .or. acceptRange('A','Z')
        return condition
     }
-    
+
     /**
      * @param {CST.Rango} node
      * @this {Visitor}
@@ -175,13 +325,15 @@ for (let i = 0; i < node.exprs.length; i++) {
     visitRango(node) {
         return `acceptRange('${node.bottom}', '${node.top}'`;
     }
+
     /**
      * @param {CST.Identificador} node
      * @this {Visitor}
      */
     visitIdentificador(node) {
-        return `peg_${node.id}()`;
+        return getRuleId(node.id) + '()';
     }
+
     /**
      * @param {CST.Punto} node
      * @this {Visitor}
@@ -189,13 +341,16 @@ for (let i = 0; i < node.exprs.length; i++) {
     visitPunto(node) {
         return 'acceptPeriod()';
     }
+
     /**
      * @param {CST.Fin} node
      * @this {Visitor}
      */
     visitFin(node) {
-        return 'acceptEOF()';
+        return 'if (.not. acceptEOF()) cycle';
     }
+
+    /// FUNCIONES AUXILIARES
 
     toAsciiString(char) {
         //console.log(char);
@@ -212,69 +367,5 @@ for (let i = 0; i < node.exprs.length; i++) {
           return char.charCodeAt(0);
         }
       }
-
-      printCondition(qty,condition){
-        //const condition = node.expr.accept(this);
-        /*console.log("QTY: "+ qty)
-        console.log("QTY: "+ condition)*/
-        //console.log(condiciones)
-        numGrupo2+=1
-        const templateOneOrMore =  `
-            if (.not. (${condition})) then
-                cursor = temp_cursor
-                cycle
-            end if
-                
-            tempDO_cursor = cursor
-            do while (.not. cursor > len(input))
-                if (.not. (${condition})) then
-                    cursor = tempDO_cursor
-                    exit
-                else
-                    tempDO_cursor = cursor
-                end if
-            end do
-        `
-        const templateZeroOrMore =  `
-            tempDO_cursor = cursor
-            do while (.not. cursor > len(input))
-                if (.not. (${condition})) then
-                    cursor = tempDO_cursor
-                    exit
-                else
-                    tempDO_cursor = cursor
-                end if
-            end do
-        `
-        const templateZeroOrOne =  `
-            if (.not. (${condition})) then
-            end if
-        `
-        const templateOne =  `
-            if (.not. (${condition})) then
-                cursor = temp_cursor
-                cycle
-            end if
-        `
-        switch (qty) {
-            case '+':
-                return templateOneOrMore;
-            case '*':
-                return templateZeroOrMore;
-            case '?':
-                return templateZeroOrOne;
-            default:
-                return templateOne;
-        }
-        
-      }
-    getVarDo(numero) {
-        let resultado = 'i';
-        for (let j = 1; j <= numero; j++) {
-          resultado += `,i${j}`;
-        }
-        return resultado;
-      }
-
 
 }

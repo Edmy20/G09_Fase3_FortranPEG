@@ -1,14 +1,32 @@
 /** @type {{[node: string]: {[arg: string]: string}}} */
 const nodes = {
-    Producciones: {
+    Grammar: {
+        rules: 'Regla[]',
+        globalCode: '?{ before: string; after?: string }',
+    },
+    Regla: {
         id: 'string',
         expr: 'Opciones',
         alias: '?string',
         start: '?boolean',
     },
-    Opciones: { exprs: 'Union[]' ,qty: '?string'},
-    Union: { exprs: 'Expresion[]' },
-    Expresion: { expr: 'Node', label: '?string', qty: '?string' },
+    Opciones: {
+        exprs: 'Union[]', qty: '?string',
+    },
+    Union: {
+        exprs: 'Node[]',
+        action: '?Predicate',
+    },
+    Predicate: {
+        returnType: 'string',
+        code: 'string',
+        params: '{ [label: string]: string }',
+    },
+    Pluck: { labeledExpr: 'Label', pluck: '?boolean' },
+    Label: { annotatedExpr: 'Annotated', label: '?string' },
+    Annotated: { expr: 'Node', qty: '?(string|Node)', text: '?boolean' },
+    Assertion: { assertion: 'Node' },
+    NegAssertion: { assertion: 'Node' },
     Cadena: { val: 'string', isCase: '?boolean' , qty: '?string'},
     Grupo: {expr: 'Opciones', qty: '?string'},
     Clase: { chars: '(string|Rango)[]', isCase: '?boolean' , qty: '?string'},
@@ -17,5 +35,4 @@ const nodes = {
     Punto: {},
     Fin: {},
 };
-
 export default nodes;
